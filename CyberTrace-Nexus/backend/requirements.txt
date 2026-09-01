@@ -1,0 +1,30 @@
+# FastAPI Backend dependencies for Digital Forensics Evidence Management System
+
+# Core web framework
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+
+# Security and authentication
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.4.0
+python-multipart>=0.0.13
+
+# Pydantic for validation (comes with FastAPI but explicit)
+pydantic>=2.5.0
+
+# Database (uses sqlite3 from standard library, but add sqlalchemy if needed)
+sqlalchemy>=2.0.23
+
+# Development and testing
+pytest>=7.4.3
+httpx>=0.25.0
+python-multipart>=0.0.13
+
+# Optional: better logging and structured output
+structlog>=23.2.0
+
+# WebSocket support (for real-time updates)
+websockets>=12.0
+
+# Background task processing
+asyncpg>=0.29.0  # If upgrading to PostgreSQL later
