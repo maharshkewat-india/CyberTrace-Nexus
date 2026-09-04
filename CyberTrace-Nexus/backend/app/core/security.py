@@ -10,7 +10,13 @@ from typing import Optional, Dict, Any
 from jose import jwt, JWTError
 
 # JWT Configuration
-JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_urlsafe(32))
+_jwt_secret = os.environ.get("JWT_SECRET_KEY")
+if not _jwt_secret:
+    raise RuntimeError(
+        "JWT_SECRET_KEY environment variable is not set. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
+JWT_SECRET_KEY = _jwt_secret
 JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days (matches existing session expiry)
 

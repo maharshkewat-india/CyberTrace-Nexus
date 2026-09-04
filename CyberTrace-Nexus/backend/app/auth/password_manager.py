@@ -13,6 +13,7 @@ Design notes:
 
 import os
 import base64
+import hmac
 from typing import Tuple
 
 import hashlib
@@ -49,6 +50,9 @@ def verify_password(password: str, salt_hex: str, hash_hex: str) -> bool:
     """
     Verify a password against its stored hash+salt.
 
+    Uses ``hmac.compare_digest`` for constant-time comparison to prevent
+    timing-attack based password guessing.
+
     Args:
         password: The plaintext password to test.
         salt_hex: Hex-encoded salt that was used when hashing.
@@ -66,7 +70,7 @@ def verify_password(password: str, salt_hex: str, hash_hex: str) -> bool:
         dklen=DK_LEN,
     )
     computed = dk.hex()
-    return computed == hash_hex
+    return hmac.compare_digest(computed, hash_hex)
 
 
 def generate_must_change_token(user_id: int) -> Tuple[str, str]:
