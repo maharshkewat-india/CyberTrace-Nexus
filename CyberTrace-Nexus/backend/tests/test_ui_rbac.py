@@ -13,17 +13,17 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from database.database import initialize_database, is_fresh_database, get_connection, DB_PATH
-from auth.authentication import (
+from backend.app.database.database import initialize_database, is_fresh_database, get_connection, DB_PATH
+from backend.app.auth.authentication import (
     register_user, authenticate_user, disable_user, enable_user, reset_password,
 )
-from auth.authorization import (
+from backend.app.auth.authorization import (
     permissions_for_roles, has_permission, require_permission,
     DEFAULT_ROLE_PERMISSIONS,
 )
-from services import case_service, evidence_service, custody_service, audit_service
+from backend.app.services import case_service, evidence_service, custody_service, audit_service
 
 
 def reset_db() -> None:

@@ -43,7 +43,6 @@ from backend.app.auth.authorization import (
 from backend.app.auth.authentication import (
     register_user,
     authenticate_user,
-    register_user as auth_register_user,
 )
 from backend.app.services.hashing import compute_hashes, verify_hashes, HashResult, VerificationResult
 from backend.app.services.case_service import create_case, get_case, list_cases
