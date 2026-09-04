@@ -71,8 +71,9 @@ def register_user(username: str, password: str, role_name: str = "AUDITOR") -> D
             id, username, role_name, password_hash, salt, created_at
 
     Raises:
-        ValueError: Invalid password or duplicate username (caught later).
+        ValueError: Invalid password.
         RuntimeError: Role not found.
+        sqlite3.IntegrityError: Username already exists (caller should catch this).
     """
     # Basic password validation
     if len(password) < PASSWORD_MIN_LENGTH:

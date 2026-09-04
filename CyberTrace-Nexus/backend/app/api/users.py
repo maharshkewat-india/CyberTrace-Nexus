@@ -74,7 +74,7 @@ async def list_users(
         conn.close()
 
 
-@router.post("", response_model=dict)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_user(
     request: UserCreate,
     current_user: CurrentUser = Depends(require_permission_dep("user.create")),
@@ -87,7 +87,10 @@ async def create_user(
         try:
             row = conn.execute("SELECT id FROM users WHERE username = ?", (request.username,)).fetchone()
             if row:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"User '{request.username}' already exists")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"User '{request.username}' already exists",
+                )
         finally:
             conn.close()
 
@@ -110,10 +113,28 @@ async def create_user(
         )
 
         return {"message": f"User '{request.username}' created successfully", "user_id": user_data["id"]}
+    except HTTPException:
+        # Re-raise HTTPException (e.g. 409 conflict) as-is
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        import sqlite3 as _sqlite3
+        if isinstance(e, _sqlite3.IntegrityError):
+            msg = str(e).lower()
+            if "unique" in msg and "username" in msg:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"User '{request.username}' already exists",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Database integrity error",
+            )
+        # Re-raise so the global error handler returns a clean 500
+        # without leaking internal details. The pre-check above should
+        # prevent IntegrityError in normal operation.
+        raise
 
 
 @router.get("/{user_id}", response_model=dict)
@@ -181,7 +202,7 @@ async def update_user(
             conn.execute("DELETE FROM user_roles WHERE user_id = ?", (user_id,))
 
             # Add new roles (assuming role_names already validated)
-            from auth.authorization import DEFAULT_ROLE_PERMISSIONS
+            from ..auth.authorization import DEFAULT_ROLE_PERMISSIONS
             valid_roles = [r for r in request.role_names if r in DEFAULT_ROLE_PERMISSIONS]
 
             for role_name in valid_roles:
@@ -211,8 +232,6 @@ async def update_user(
         )
 
         return {"message": f"User {user_id} updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     finally:
         conn.close()
 
@@ -226,32 +245,29 @@ async def disable_user_endpoint(
     if user_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot disable yourself")
 
+    disable_user(user_id)
+
+    # Get username for logging
+    from database.database import get_connection
+    conn = get_connection()
     try:
-        disable_user(user_id)
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        username = row["username"] if row else f"user-{user_id}"
+    finally:
+        conn.close()
 
-        # Get username for logging
-        from database.database import get_connection
-        conn = get_connection()
-        try:
-            row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
-            username = row["username"] if row else f"user-{user_id}"
-        finally:
-            conn.close()
+    # Log the action
+    log_event(
+        action="USER_DISABLED",
+        user_id=current_user.id,
+        username=current_user.username,
+        role_name=", ".join(current_user.role_names),
+        description=f"Disabled user {username} (ID: {user_id})",
+        entity_type="user",
+        entity_id=user_id,
+    )
 
-        # Log the action
-        log_event(
-            action="USER_DISABLED",
-            user_id=current_user.id,
-            username=current_user.username,
-            role_name=", ".join(current_user.role_names),
-            description=f"Disabled user {username} (ID: {user_id})",
-            entity_type="user",
-            entity_id=user_id,
-        )
-
-        return {"message": f"User {user_id} disabled successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    return {"message": f"User {user_id} disabled successfully"}
 
 
 @router.post("/{user_id}/enable", response_model=dict)
@@ -260,32 +276,29 @@ async def enable_user_endpoint(
     current_user: CurrentUser = Depends(require_permission_dep("user.disable")),
 ):
     """Re-enable a user account."""
+    enable_user(user_id)
+
+    # Get username for logging
+    from database.database import get_connection
+    conn = get_connection()
     try:
-        enable_user(user_id)
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        username = row["username"] if row else f"user-{user_id}"
+    finally:
+        conn.close()
 
-        # Get username for logging
-        from database.database import get_connection
-        conn = get_connection()
-        try:
-            row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
-            username = row["username"] if row else f"user-{user_id}"
-        finally:
-            conn.close()
+    # Log the action
+    log_event(
+        action="USER_ENABLED",
+        user_id=current_user.id,
+        username=current_user.username,
+        role_name=", ".join(current_user.role_names),
+        description=f"Enabled user {username} (ID: {user_id})",
+        entity_type="user",
+        entity_id=user_id,
+    )
 
-        # Log the action
-        log_event(
-            action="USER_ENABLED",
-            user_id=current_user.id,
-            username=current_user.username,
-            role_name=", ".join(current_user.role_names),
-            description=f"Enabled user {username} (ID: {user_id})",
-            entity_type="user",
-            entity_id=user_id,
-        )
-
-        return {"message": f"User {user_id} enabled successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    return {"message": f"User {user_id} enabled successfully"}
 
 
 @router.post("/{user_id}/reset-password", response_model=dict)
@@ -295,32 +308,27 @@ async def reset_user_password(
     current_user: CurrentUser = Depends(require_permission_dep("user.update")),
 ):
     """Reset user password (admin only)."""
+    # Get username for logging
+    from database.database import get_connection
+    conn = get_connection()
     try:
-        # Get username for logging
-        from database.database import get_connection
-        conn = get_connection()
-        try:
-            row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
-            username = row["username"] if row else f"user-{user_id}"
-        finally:
-            conn.close()
+        row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        username = row["username"] if row else f"user-{user_id}"
+    finally:
+        conn.close()
 
-        # Reset the password
-        reset_password(user_id, request.new_password)
+    # Reset the password (may raise ValueError for invalid password)
+    reset_password(user_id, request.new_password)
 
-        # Log the action
-        log_event(
-            action="PASSWORD_RESET",
-            user_id=current_user.id,
-            username=current_user.username,
-            role_name=", ".join(current_user.role_names),
-            description=f"Password reset for user {username} (ID: {user_id})",
-            entity_type="user",
-            entity_id=user_id,
-        )
+    # Log the action
+    log_event(
+        action="PASSWORD_RESET",
+        user_id=current_user.id,
+        username=current_user.username,
+        role_name=", ".join(current_user.role_names),
+        description=f"Password reset for user {username} (ID: {user_id})",
+        entity_type="user",
+        entity_id=user_id,
+    )
 
-        return {"message": f"Password reset for user {username} (ID: {user_id})"}
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    return {"message": f"Password reset for user {username} (ID: {user_id})"}

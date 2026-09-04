@@ -41,7 +41,7 @@ async def list_custody_for_evidence(
     return [_custody_to_response(e) for e in events]
 
 
-@router.post("", response_model=dict)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def add_custody_event(
     request: CustodyEventCreate,
     current_user: CurrentUser = Depends(require_permission_dep("custody.create")),
@@ -51,10 +51,13 @@ async def add_custody_event(
         # Auto-populate case_id from evidence if not provided
         case_id = request.case_id
         if case_id is None:
-            from services.evidence_service import get_evidence
+            from ..services.evidence_service import get_evidence
             ev = get_evidence(request.evidence_id)
             if not ev:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Evidence {request.evidence_id} not found")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Evidence {request.evidence_id} not found",
+                )
             case_id = ev.case_id
 
         event_id = custody_service.add_custody_event(
@@ -68,7 +71,7 @@ async def add_custody_event(
             recorded_by=current_user.id,
         )
 
-        from services.audit_service import log_event
+        from ..services.audit_service import log_event
         log_event(
             action=f"CUSTODY_{request.action}",
             user_id=current_user.id,
@@ -83,8 +86,6 @@ async def add_custody_event(
         return _custody_to_response(event)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/case/{case_id}", response_model=List[dict])

@@ -79,7 +79,7 @@ async def logout(current_user: CurrentUser = Depends(get_current_user)):
     This endpoint exists for API consistency and audit logging.
     """
     # Log audit event
-    from services.audit_service import log_event
+    from ..services.audit_service import log_event
     log_event(
         action="LOGOUT",
         user_id=current_user.id,

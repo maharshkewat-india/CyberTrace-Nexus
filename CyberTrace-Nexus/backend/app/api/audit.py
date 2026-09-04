@@ -37,10 +37,10 @@ async def list_audit_logs(
             case_id=case_id,
         )
         return logs
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load audit logs: {str(e)}"
+            detail="Failed to load audit logs"
         )
 
 

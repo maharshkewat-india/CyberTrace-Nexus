@@ -52,7 +52,7 @@ def add_custody_event(
     Required permission: custody.create
     """
     # Validate action
-    from auth.authorization import CUSTODY_ACTIONS
+    from ..auth.authorization import CUSTODY_ACTIONS
     if action not in CUSTODY_ACTIONS:
         raise ValueError(f"Invalid custody action: {action}")
 

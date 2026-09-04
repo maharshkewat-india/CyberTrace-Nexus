@@ -44,7 +44,7 @@ async def list_all_evidence(
     return [_evidence_to_response(ev) for ev in evidence_list]
 
 
-@router.post("", response_model=dict)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def register_evidence(
     request: EvidenceCreate,
     current_user: CurrentUser = Depends(require_permission_dep("evidence.create")),
@@ -60,14 +60,18 @@ async def register_evidence(
             registered_by=current_user.id,
         )
         return _evidence_to_response(ev)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence file not found.",
+        )
+    except PermissionError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to read the evidence file.",
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{evidence_id}", response_model=dict)
@@ -96,6 +100,10 @@ async def update_evidence(
     from database.database import get_connection
     conn = get_connection()
     try:
+        # Build update dict, filtering by allowlisted column names to prevent
+        # any future schema/code drift from introducing SQL-injection-prone
+        # dynamic SET clauses.
+        _allowed = frozenset({"evidence_type", "description", "source", "status"})
         updates = {}
         if request.evidence_type is not None:
             updates["evidence_type"] = request.evidence_type
@@ -106,18 +114,19 @@ async def update_evidence(
         if request.status is not None:
             updates["status"] = request.status
 
-        if updates:
-            set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
-            params = list(updates.values())
+        safe_updates = {k: v for k, v in updates.items() if k in _allowed}
+        if safe_updates:
+            set_clause = ", ".join(f"{k} = ?" for k in safe_updates.keys())
+            params = list(safe_updates.values())
             params.append(evidence_id)
             conn.execute(f"UPDATE evidence SET {set_clause} WHERE id = ?", params)
             conn.commit()
 
-            from services.audit_service import log_event
+            from ..services.audit_service import log_event
             log_event(
                 action="EVIDENCE_UPDATED",
                 user_id=current_user.id,
-                description=f"Updated evidence {evidence_id}: {', '.join(updates.keys())}",
+                description=f"Updated evidence {evidence_id}: {', '.join(safe_updates.keys())}",
                 entity_type="evidence",
                 entity_id=evidence_id,
             )
@@ -145,12 +154,13 @@ async def verify_evidence(
             verified_by=current_user.id,
         )
         return result
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence file is missing on disk; cannot verify integrity.",
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/{evidence_id}/hash", response_model=dict)
@@ -164,17 +174,18 @@ async def compute_hash(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Evidence {evidence_id} not found")
 
     try:
-        from services.hashing import compute_hashes
+        from ..services.hashing import compute_hashes
         result = compute_hashes(ev.file_path)
         return {
             "md5": result.md5,
             "sha256": result.sha256,
             "status": "computed",
         }
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidence file is missing on disk.",
+        )
 
 
 @router.post("/{evidence_id}/note", response_model=dict)
@@ -224,6 +235,6 @@ async def get_custody(
     current_user: CurrentUser = Depends(require_permission_dep("custody.view")),
 ):
     """Get chain of custody for evidence."""
-    from services import custody_service
+    from ..services import custody_service
     events = custody_service.list_custody_for_evidence(evidence_id)
     return events

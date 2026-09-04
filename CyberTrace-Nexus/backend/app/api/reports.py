@@ -81,8 +81,6 @@ def _generate_case_summary(case) -> dict:
 
 def _generate_evidence_report(case_id: int) -> dict:
     """Generate evidence report for a case."""
-    from services import evidence_service
-
     case = case_service.get_case(case_id)
     evidence_list = evidence_service.list_evidence_for_case(case_id)
 
@@ -115,8 +113,6 @@ def _generate_evidence_report(case_id: int) -> dict:
 
 def _generate_custody_report(case_id: int) -> dict:
     """Generate custody report for a case."""
-    from services import custody_service
-
     case = case_service.get_case(case_id)
     custody_events = custody_service.list_custody_for_case(case_id)
 
@@ -149,7 +145,7 @@ def _generate_custody_report(case_id: int) -> dict:
 
 def _generate_audit_report(case_id: int) -> dict:
     """Generate audit report for a case."""
-    from services.audit_service import get_audit_logs
+    from ..services.audit_service import get_audit_logs
 
     case = case_service.get_case(case_id)
     audit_logs = get_audit_logs(case_id=case_id, limit=10000)  # Get all for the case

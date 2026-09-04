@@ -24,15 +24,23 @@ class EvidenceBase(BaseModel):
 
 
 class EvidenceCreate(BaseModel):
+    """Schema for registering new evidence.
+
+    Note: registered_by is determined from the authenticated user context,
+    not from the request body. This prevents a user from registering evidence
+    under a different user's identity.
+    """
     case_id: int
     file_path: str
     evidence_type: str = "Document"
     description: str = ""
     source: str = ""
-    registered_by: int
 
-    # The following are auto-populated during registration
+    # The following are auto-populated during registration and excluded
+    # from the request body. The 'registered_by' field is sourced from the
+    # authenticated user (current_user.id) in the API layer.
     evidence_id: Optional[str] = Field(None, exclude=True)
+    registered_by: Optional[int] = Field(None, exclude=True)
     file_size: Optional[int] = Field(None, exclude=True)
     file_extension: Optional[str] = Field(None, exclude=True)
     acquisition_time: Optional[datetime] = Field(None, exclude=True)

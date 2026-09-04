@@ -125,7 +125,7 @@ def register_evidence(
         OSError: Other I/O failure.
     """
     # Validate case exists
-    from services.case_service import get_case
+    from .case_service import get_case
     case = get_case(case_id)
     if not case:
         raise ValueError(f"Case {case_id} not found.")

@@ -79,7 +79,7 @@ def create_case(
 
     Requires permission: case.create
     """
-    from auth.authorization import require_permission
+    from ..auth.authorization import require_permission
     # Permission check will happen in the caller via decorator or explicit call
 
     _validate_case_fields(title, "Open", priority)
@@ -248,8 +248,14 @@ def update_case(
         _validate_status_transition(existing.status, updates["status"])
 
     def _update(c):
-        set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
-        params = list(updates.values())
+        # Build SET clause from allowlisted column names only.
+        # This prevents SQL injection even if the dict keys are manipulated.
+        _allowed = frozenset({"title", "incident_date", "status", "priority", "description"})
+        set_parts = [f"{k} = ?" for k in updates.keys() if k in _allowed]
+        if not set_parts:
+            return existing
+        set_clause = ", ".join(set_parts)
+        params = [v for k, v in updates.items() if k in _allowed]
         params.append(case_id)
         c.execute(
             f"UPDATE cases SET {set_clause}, updated_at = ? WHERE id = ?",

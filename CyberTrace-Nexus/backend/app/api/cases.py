@@ -64,7 +64,7 @@ async def list_cases(
     return [_model_to_response(c) for c in cases]
 
 
-@router.post("", response_model=dict)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_case(
     request: CaseCreate,
     current_user: CurrentUser = Depends(require_permission_dep("case.create")),
@@ -81,8 +81,6 @@ async def create_case(
         return _model_to_response(case)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{case_id}", response_model=dict)
@@ -122,8 +120,6 @@ async def update_case(
         return _model_to_response(case)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/{case_id}/close", response_model=dict)
@@ -178,6 +174,12 @@ async def get_case_users(
     current_user: CurrentUser = Depends(require_permission_dep("case.view")),
 ):
     """Get users assigned to a case."""
+    case = case_service.get_case(case_id)
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Case {case_id} not found",
+        )
     users = case_service.get_case_users(case_id)
     return users
 
@@ -188,7 +190,13 @@ async def get_case_evidence(
     current_user: CurrentUser = Depends(require_permission_dep("evidence.view")),
 ):
     """Get all evidence for a case."""
-    from services import evidence_service
+    case = case_service.get_case(case_id)
+    if not case:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Case {case_id} not found",
+        )
+    from ..services import evidence_service
     evidence_list = evidence_service.list_evidence_for_case(case_id)
     return [_evidence_to_dict(ev) for ev in evidence_list]
 
